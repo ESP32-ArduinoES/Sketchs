@@ -6,7 +6,6 @@
 
 #include <string.h>
 #include "es8311.h"
-#include "Wire.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_err.h"
@@ -147,36 +146,14 @@ static const char *TAG = "ES8311";
 static inline esp_err_t es8311_write_reg(es8311_handle_t dev, uint8_t reg_addr, uint8_t data)
 {
     es8311_dev_t *es = (es8311_dev_t *) dev;
-    if (es->dev_addr > 0x7F) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    Wire.beginTransmission(static_cast<uint8_t>(es->dev_addr));
-    if (Wire.write(reg_addr) != 1 || Wire.write(data) != 1) {
-        return ESP_FAIL;
-    }
-    return Wire.endTransmission() == 0 ? ESP_OK : ESP_FAIL;
+    const uint8_t write_buf[2] = {reg_addr, data};
+    return i2c_master_write_to_device(es->port, es->dev_addr, write_buf, sizeof(write_buf), pdMS_TO_TICKS(1000));
 }
 
 static inline esp_err_t es8311_read_reg(es8311_handle_t dev, uint8_t reg_addr, uint8_t *reg_value)
 {
     es8311_dev_t *es = (es8311_dev_t *) dev;
-    if (es->dev_addr > 0x7F || !reg_value) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    const uint8_t address = static_cast<uint8_t>(es->dev_addr);
-    Wire.beginTransmission(address);
-    if (Wire.write(reg_addr) != 1 || Wire.endTransmission(false) != 0) {
-        return ESP_FAIL;
-    }
-    if (Wire.requestFrom(address, static_cast<size_t>(1), static_cast<bool>(true)) != 1
-        || Wire.available() < 1) {
-        return ESP_FAIL;
-    }
-
-    *reg_value = static_cast<uint8_t>(Wire.read());
-    return ESP_OK;
+    return i2c_master_write_read_device(es->port, es->dev_addr, &reg_addr, 1, reg_value, 1, pdMS_TO_TICKS(1000));
 }
 
 /*
@@ -470,18 +447,16 @@ esp_err_t es8311_codec_init(void)
     /* Initialize es8311 codec */
     es8311_handle_t es_handle = es8311_create(I2C_NUM_0, ES8311_ADDRRES_0);
     ESP_RETURN_ON_FALSE(es_handle, ESP_FAIL, TAG, "es8311 create failed");
-    const int sample_frequency = 44100;
-    const int mclk_frequency = sample_frequency * 256;
     const es8311_clock_config_t es_clk = {
         .mclk_inverted = false,
         .sclk_inverted = false,
         .mclk_from_mclk_pin = true,
-        .mclk_frequency = mclk_frequency,
-        .sample_frequency = sample_frequency
+        .mclk_frequency = EXAMPLE_MCLK_FREQ_HZ,
+        .sample_frequency = EXAMPLE_SAMPLE_RATE
     };
 
-    ESP_ERROR_CHECK(es8311_init(es_handle, &es_clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16));
-    ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(es_handle, mclk_frequency, sample_frequency), TAG, "set es8311 sample frequency failed");
+    ESP_RETURN_ON_ERROR(es8311_init(es_handle, &es_clk, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16), TAG, "ES8311 init failed");
+    ESP_RETURN_ON_ERROR(es8311_sample_frequency_config(es_handle, EXAMPLE_SAMPLE_RATE * EXAMPLE_MCLK_MULTIPLE, EXAMPLE_SAMPLE_RATE), TAG, "set es8311 sample frequency failed");
     ESP_RETURN_ON_ERROR(es8311_voice_volume_set(es_handle, EXAMPLE_VOICE_VOLUME, NULL), TAG, "set es8311 volume failed");
     //ESP_RETURN_ON_ERROR(es8311_microphone_config(es_handle, false), TAG, "set es8311 microphone failed");
     return ESP_OK;

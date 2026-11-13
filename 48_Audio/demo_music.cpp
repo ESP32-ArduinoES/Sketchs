@@ -1,7 +1,11 @@
 #include "demo_music.h"
+#include <string.h>
+#include <strings.h>
 
-char * songs[99] = {};
-int song_num = 0;
+char * title_list[99];
+
+char * songs[99] ;
+bool read_flag = false;
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels)
 {
@@ -20,31 +24,37 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels)
     }
 
     File file = root.openNextFile();
+    int i=0;
     while(file)
     {
-        if(file.isDirectory())
+        String path = file.path();
+        const char *filepath = path.c_str();
+        const char *basename = strrchr(filepath, '/');
+        basename = basename ? basename + 1 : filepath;
+
+        if (strncmp(basename, "._", 2) != 0 && file.isDirectory())
         {
             Serial.print("  DIR : ");
             Serial.println(file.name());
             if(levels)
             {
-                String subdirectory = file.path();
-                listDir(fs, subdirectory.c_str(), levels -1);
+                listDir(fs, filepath, levels -1);
             }
-        } 
-        else 
+        }
+        else if (strncmp(basename, "._", 2) != 0)
         {
-            String filepath = file.path();
             Serial.println(filepath);
-            String filename = filepath.substring(filepath.lastIndexOf('/') + 1);
-            filename.toLowerCase();
-            if (filename.endsWith(".mp3") && !filename.startsWith("._") && song_num < 99)
+            size_t len = strlen(filepath);
+            if (len >= 4 && strcasecmp(filepath + len - 4, ".mp3") == 0)
             {
-                songs[song_num] = new char[filepath.length() + 1];
-                strcpy(songs[song_num], filepath.c_str());
-                Serial.print("Added song: ");
-                Serial.println(songs[song_num]);
-                song_num++;
+                songs[i] = new char[len + 1]; // Add 1 for null terminator
+                read_flag = true;
+                strcpy(songs[i], filepath);
+                Serial.print("out:");
+                Serial.println(filepath);
+                Serial.print("songs:");
+                Serial.println(songs[i]);
+                i+=1;
             }
         }
         file = root.openNextFile();
@@ -53,10 +63,10 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels)
 
 bool demo_music(void)
 {
-    song_num = 0;
     listDir(SD_MMC,"/",1);
-    if (song_num > 0)
+    if (read_flag)
     {
+        memcpy(title_list,songs,sizeof(songs));
         return true;
     } 
     else
@@ -68,27 +78,22 @@ bool demo_music(void)
 
 const char * demo_music_get_title(uint32_t track_id)
 {
-    if(track_id >= static_cast<uint32_t>(song_num))
+    if(track_id >= sizeof(title_list) / sizeof(title_list[0])) 
     {
         return NULL;
     }
-    return songs[track_id];
+    return title_list[track_id];
 }
 
-bool demo_music_play(uint32_t track_id) 
+void demo_music_play(uint32_t track_id) 
 {
+    char chbuf[100];
     const char *filename = demo_music_get_title(track_id);
-    if (!filename) {
-        Serial.printf("Invalid song index: %lu\n", static_cast<unsigned long>(track_id));
-        return false;
-    }
-
-    Serial.printf("Playing: %s\n", filename);
-    if (!audio.connecttoFS(SD_MMC, filename)) {
-        Serial.println("Could not open MP3 file.");
-        return false;
-    }
-    return true;
+    Serial.println(String(filename));
+    sprintf(chbuf, "%s", filename);
+    audio.pauseResume();
+    delay(100);
+    audio.connecttoFS(SD_MMC, chbuf);
 }
 
 void demo_music_pause(void)
