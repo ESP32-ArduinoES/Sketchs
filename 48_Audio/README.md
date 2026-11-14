@@ -176,3 +176,7 @@ Esta función se ejecuta continuamente en Arduino. Aquí se mantiene la librerí
 ## 9. Resumen corto
 
 Es un sketch muy típico de audio en ESP32: inicializa SD + codec + I2S, carga una música de prueba y la reproduce en bucle de servicio con `audio.loop()`.
+
+## 10. Configuración
+
+![Configuración](./Configuración.png)
